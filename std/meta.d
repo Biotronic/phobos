@@ -879,6 +879,65 @@ template anySatisfy(alias F, T...)
     static assert( anySatisfy!(isIntegral, int, double));
 }
 
+template satisfyEach(T, Fns...)
+{
+    static if (Fns.length == 0)
+    {
+        enum satisfyEach = true;
+    }
+    else
+    {
+        alias Fn = Fns[0];
+        enum satisfyEach = Fn!T && satisfyEach!(T, Fns[1..$]);
+    }
+}
+
+@safe unittest
+{
+    static assert(satisfyEach!(int[], isInputRange, isForwardRange));
+    static assert(!satisfyEach!(int, isInputRange, isForwardRange));
+}
+
+template recursivelySatisfy(T, alias Select, int depth, Fns...) if (depth >= 0)
+{
+    static if (depth == 0)
+    {
+        enum recursivelySatisfy = true;
+    } else
+    {
+        enum recursivelySatisfy = satisfyEach!(T, Fns) &&
+            recursivelySatisfy!(Select!T, Select, depth -1, Fns);
+    }
+}
+
+@safe unittest
+{
+    static assert(recursivelySatisfy!(int[][], ElementType, 2, isInputRange, isForwardRange));
+    static assert(recursivelySatisfy!(int[], ElementType, 1, isInputRange, isForwardRange));
+    static assert(!recursivelySatisfy!(int[], ElementType, 2, isInputRange, isForwardRange));
+}
+
+template recursivelySatisfyDepth(T, alias Select, Fns...)
+{
+    static if (satisfyEach!(T, Fns)) {
+        static if (__traits(compiles, Select!T)) {
+            enum recursivelySatisfyDepth = 1 + recursivelySatisfyDepth!(Select!T, Select, Fns);
+        } else {
+            enum recursivelySatisfyDepth = 1;
+        }
+    } else {
+        enum recursivelySatisfyDepth = 0;
+    }
+}
+
+@safe unittest
+{
+    import std.conv;
+    static assert(recursivelySatisfyDepth!(int[], ElementType, isInputRange, hasLength) == 1);
+    static assert(recursivelySatisfyDepth!(int[][], ElementType, isInputRange, hasLength) == 2);
+    static assert(recursivelySatisfyDepth!(typeof([1].map!(a => a.to!string)), ElementType, isInputRange, hasLength) == 1);
+}
+
 
 /**
  * Filters an $(D AliasSeq) using a template predicate. Returns a
