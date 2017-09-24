@@ -5297,285 +5297,269 @@ auto sequence(alias fun, State...)(State args)
     }
     ---
 */
-auto iota(B, E, S)(B begin, E end, S step)
-if ((isIntegral!(CommonType!(B, E)) || isPointer!(CommonType!(B, E)))
-        && isIntegral!S)
+struct IotaResult(B, E, S)
 {
-    import std.conv : unsigned;
+    alias ValueType = CommonType!(B,E);
 
-    alias Value = CommonType!(Unqual!B, Unqual!E);
-    alias StepType = Unqual!S;
+    ValueType current;
+    ValueType end;
 
-    assert(step != 0 || begin == end);
+    static if (isFloatingPoint!ValueType)
+        size_t count, index;
+    static if (hasStep)
+        S step;
 
-    static struct Result
+    enum hasStep = !is(S == void);
+    enum hasLength = is(typeof((end - current) / step) : size_t);
+
+    this(inout(B) current, inout(E) end) inout
     {
-        private Value current, last;
-        private StepType step; // by convention, 0 if range is empty
+        this.current = current;
+        this.end = end;
+    }
 
-        this(Value current, Value pastLast, StepType step)
+    static if (hasStep)
+    {
+        this(inout(B) current, inout(E) end, inout(S) step) inout
         {
-            if (current < pastLast && step > 0)
-            {
-                // Iterating upward
-                assert(unsigned((pastLast - current) / step) <= size_t.max);
-                // Cast below can't fail because current < pastLast
-                this.last = cast(Value) (pastLast - 1);
-                this.last -= unsigned(this.last - current) % step;
-            }
-            else if (current > pastLast && step < 0)
-            {
-                // Iterating downward
-                assert(unsigned((current - pastLast) / (0 - step)) <= size_t.max);
-                // Cast below can't fail because current > pastLast
-                this.last = cast(Value) (pastLast + 1);
-                this.last += unsigned(current - this.last) % (0 - step);
-            }
-            else
-            {
-                // Initialize an empty range
-                this.step = 0;
-                return;
-            }
-            this.step = step;
             this.current = current;
-        }
-
-        @property bool empty() const { return step == 0; }
-        @property inout(Value) front() inout { assert(!empty); return current; }
-        void popFront()
-        {
-            assert(!empty);
-            if (current == last) step = 0;
-            else current += step;
-        }
-
-        @property inout(Value) back() inout
-        {
-            assert(!empty);
-            return last;
-        }
-        void popBack()
-        {
-            assert(!empty);
-            if (current == last) step = 0;
-            else last -= step;
-        }
-
-        @property auto save() { return this; }
-
-        inout(Value) opIndex(ulong n) inout
-        {
-            assert(n < this.length);
-
-            // Just cast to Value here because doing so gives overflow behavior
-            // consistent with calling popFront() n times.
-            return cast(inout Value) (current + step * n);
-        }
-        auto opBinaryRight(string op)(Value val) const
-        if (op == "in")
-        {
-            if (empty) return false;
-            //cast to avoid becoming unsigned
-            auto supposedIndex = cast(StepType)(val - current) / step;
-            return supposedIndex < length && supposedIndex * step + current == val;
-        }
-        auto contains(Value x){return x in this;}
-        inout(Result) opSlice() inout { return this; }
-        inout(Result) opSlice(ulong lower, ulong upper) inout
-        {
-            assert(upper >= lower && upper <= this.length);
-
-            return cast(inout Result) Result(
-                cast(Value)(current + lower * step),
-                cast(Value)(current + upper * step),
-                step);
-        }
-        @property size_t length() const
-        {
-            if (step > 0)
-                return 1 + cast(size_t) (unsigned(last - current) / step);
-            if (step < 0)
-                return 1 + cast(size_t) (unsigned(current - last) / (0 - step));
-            return 0;
-        }
-
-        alias opDollar = length;
-    }
-
-    return Result(begin, end, step);
-}
-
-/// Ditto
-auto iota(B, E)(B begin, E end)
-if (isFloatingPoint!(CommonType!(B, E)))
-{
-    return iota(begin, end, CommonType!(B, E)(1));
-}
-
-/// Ditto
-auto iota(B, E)(B begin, E end)
-if (isIntegral!(CommonType!(B, E)) || isPointer!(CommonType!(B, E)))
-{
-    import std.conv : unsigned;
-
-    alias Value = CommonType!(Unqual!B, Unqual!E);
-
-    static struct Result
-    {
-        private Value current, pastLast;
-
-        this(Value current, Value pastLast)
-        {
-            if (current < pastLast)
+            if (step != 0 && (step > 0) == (current < end))
             {
-                assert(unsigned(pastLast - current) <= size_t.max);
-
-                this.current = current;
-                this.pastLast = pastLast;
+                this.step = step;
+                this.end = end;
             }
             else
             {
-                // Initialize an empty range
-                this.current = this.pastLast = current;
+                this.end = current;
+                this.step = 0;
+            }
+            static if (isFloatingPoint!ValueType)
+            {
+                this.index = 0;
+                auto count = cast(size_t)((end - current)/step);
+                auto pastEnd = current + count * step;
+                if (step > 0)
+                {
+                    if (pastEnd < end) ++count;
+                    assert(current + count * step >= end);
+                }
+                else
+                {
+                    if (pastEnd > end) ++count;
+                    assert(current + count * step <= end);
+                }
+                this.count = count;
             }
         }
-
-        @property bool empty() const { return current == pastLast; }
-        @property inout(Value) front() inout { assert(!empty); return current; }
-        void popFront() { assert(!empty); ++current; }
-
-        @property inout(Value) back() inout { assert(!empty); return cast(inout(Value))(pastLast - 1); }
-        void popBack() { assert(!empty); --pastLast; }
-
-        @property auto save() { return this; }
-
-        inout(Value) opIndex(size_t n) inout
-        {
-            assert(n < this.length);
-
-            // Just cast to Value here because doing so gives overflow behavior
-            // consistent with calling popFront() n times.
-            return cast(inout Value) (current + n);
-        }
-        auto opBinaryRight(string op)(Value val) const
-        if (op == "in")
-        {
-            return current <= val && val < pastLast;
-        }
-        auto contains(Value x){return x in this;}
-        inout(Result) opSlice() inout { return this; }
-        inout(Result) opSlice(ulong lower, ulong upper) inout
-        {
-            assert(upper >= lower && upper <= this.length);
-
-            return cast(inout Result) Result(cast(Value)(current + lower),
-                                            cast(Value)(pastLast - (length - upper)));
-        }
-        @property size_t length() const
-        {
-            return cast(size_t)(pastLast - current);
-        }
-
-        alias opDollar = length;
     }
 
-    return Result(begin, end);
-}
-
-/// Ditto
-auto iota(E)(E end)
-if (is(typeof(iota(E(0), end))))
-{
-    E begin = E(0);
-    return iota(begin, end);
-}
-
-/// Ditto
-// Specialization for floating-point types
-auto iota(B, E, S)(B begin, E end, S step)
-if (isFloatingPoint!(CommonType!(B, E, S)))
-in
-{
-    assert(step != 0, "iota: step must not be 0");
-    assert((end - begin) / step >= 0, "iota: incorrect startup parameters");
-}
-body
-{
-    alias Value = Unqual!(CommonType!(B, E, S));
-    static struct Result
+    @property
+    bool empty()
     {
-        private Value start, step;
-        private size_t index, count;
-
-        this(Value start, Value end, Value step)
+        static if (isFloatingPoint!ValueType)
+            return index == count;
+        else static if (!is(typeof(current < end)))
+            return current == end;
+        else
         {
-            import std.conv : to;
-
-            this.start = start;
-            this.step = step;
-            immutable fcount = (end - start) / step;
-            count = to!size_t(fcount);
-            auto pastEnd = start + count * step;
             if (step > 0)
-            {
-                if (pastEnd < end) ++count;
-                assert(start + count * step >= end);
-            }
+                return !(current < end);
+            else if (step < 0)
+                return !(current > end);
             else
-            {
-                if (pastEnd > end) ++count;
-                assert(start + count * step <= end);
-            }
+                return true;
         }
+    }
 
-        @property bool empty() const { return index == count; }
-        @property Value front() const { assert(!empty); return start + step * index; }
-        void popFront()
+    @property
+    bool empty()() const
+    if (is(typeof((const B b, const E e) => b < e)) || 
+        is(typeof((const B b, const E e) => b == e)))
+    {
+        static if (isFloatingPoint!ValueType)
+            return index == count;
+        else static if (!is(typeof(current < end)))
+            return current == end;
+        else
         {
-            assert(!empty);
+            if (step > 0)
+                return !(current < end);
+            else if (step < 0)
+                return !(current > end);
+            else
+                return true;
+        }
+    }
+
+    @property
+    inout(ValueType) front() inout
+    {
+        static if (isFloatingPoint!ValueType)
+            return current + index * step;
+        else
+            return current;
+    }
+
+    void popFront()
+    {
+        assert(!empty);
+        static if (isFloatingPoint!ValueType)
             ++index;
-        }
-        @property Value back() const
+        else static if (hasStep)
         {
-            assert(!empty);
-            return start + step * (count - 1);
+            if ((step > 0 && current + step > end) ||
+                (step > 0 && current + step > end))
+                step = 0;
+            current += step;
         }
-        void popBack()
+        else
+            ++current;
+    }
+
+    @property
+    IotaResult save()
+    {
+        return this;
+    }
+
+    enum canMultiply(T) = is(typeof((B b, E e, S s, T t){ return b + t * s ; }));
+    enum canDivide(T) = is(typeof((B b, E e, S s, T t){ return (e - b)/t ; }));
+
+    static if (canDivide!S)
+    {
+        ValueType opIndex(I)(I idx) const if (canMultiply!I)
         {
-            assert(!empty);
-            --count;
+            assert(idx < length);
+            assert(idx >= 0);
+            static if (isFloatingPoint!ValueType)
+                return current + (index + idx) * step;
+            else
+                return cast(ValueType)(current + idx * step);
         }
 
-        @property auto save() { return this; }
-
-        Value opIndex(size_t n) const
-        {
-            assert(n < count);
-            return start + step * (n + index);
-        }
-        inout(Result) opSlice() inout
+        inout(IotaResult) opSlice() inout
         {
             return this;
         }
-        inout(Result) opSlice(size_t lower, size_t upper) inout
-        {
-            assert(upper >= lower && upper <= count);
 
-            Result ret = this;
-            ret.index += lower;
-            ret.count = upper - lower + ret.index;
-            return cast(inout Result) ret;
-        }
-        @property size_t length() const
+        auto opDollar() const { return length; }
+
+        @property
+        auto length() const
         {
-            return count - index;
+            static if (isFloatingPoint!ValueType)
+                return count - index;
+            else
+                if (step > 0)
+                    return 1 + cast(size_t) (cast(size_t)(end - current -1) / step);
+                else if (step < 0)
+                    return 1 + cast(size_t) (cast(size_t)(current - end -1) / (0 - step));
+                else
+                    return 0;
         }
 
-        alias opDollar = length;
+        inout(IotaResult) opSlice(I1, I2)(I1 idx1, I2 idx2) inout
+        {
+            assert(idx1 < length);
+            assert(idx1 >= 0);
+            assert(idx2 >= idx1);
+            assert(idx2 <= length);
+            assert(idx2 >= 0);
+
+            static if (isFloatingPoint!ValueType)
+                return typeof(this)(
+                    current + (idx1 + index) * step,
+                    current + (idx2 + index) * step,
+                    step);
+            else
+                return typeof(this)(
+                    current + idx1 * step,
+                    current + idx2 * step,
+                    step);
+        }
+
+        @property
+        inout(ValueType) back () inout
+        {
+            static if (isFloatingPoint!ValueType)
+                return current + step * (count - 1);
+            else
+                return cast(ValueType)(current + step * (length-1));
+        }
+
+        void popBack()
+        {
+            assert(!empty);
+            static if (isFloatingPoint!ValueType)
+                --count;
+            else static if (hasStep)
+                end -= step;
+            else
+                --end;
+        }
+
+        bool opBinaryRight(string op : "in")(ValueType value) const
+        {
+            if (empty) return false;
+            static if (is(typeof(signed(value - current))))
+                auto supposedIndex = signed(value - current) / step;
+            else
+                auto supposedIndex = (value - current) / step;
+
+            if (supposedIndex >= length || supposedIndex < 0) return false;
+            return supposedIndex * step + current == value;
+        }
+
+        bool contains(B value) const
+        {
+            return value in this;
+        }
     }
+}
 
-    return Result(begin, end, step);
+auto iota(E)(E end)
+{
+    static if (is(typeof(end += 1)))
+        return IotaResult!(Unqual!E, Unqual!E, int)(E(0), end, 1);
+    else
+        return IotaResult!(Unqual!E, Unqual!E, void)(E(0), end);
+}
+
+auto iota(B, E)(B begin, E end)
+{
+    static if (is(typeof(begin += 1)))
+        return IotaResult!(Unqual!B, Unqual!E, int)(begin, end, 1);
+    else
+        return IotaResult!(Unqual!B, Unqual!E, void)(begin, end);
+}
+
+auto iota(B, E, S)(B begin, E end, S step)
+{
+    return IotaResult!(Unqual!B, Unqual!E, Unqual!S)(begin, end, step);
+}
+
+@system unittest
+{
+    import std.bigint : BigInt;
+    import std.algorithm.comparison : equal;
+    auto a = iota(BigInt(1), BigInt(100), BigInt(5));
+    auto b = iota(BigInt(1), BigInt(100), 5);
+    auto c = iota(BigInt(100), BigInt(1), -5);
+    assert(equal(a, b));
+    assert(equal(a, iota(1, 100, 5)));
+    assert(equal(c, iota(100, 1, -5)));
+
+    assert(iota(BigInt(10), BigInt(20), 0).empty);
+    assert(iota(BigInt(10), BigInt(1),  1).empty);
+    assert(iota(BigInt(1), BigInt(10), -2).empty);
+
+    auto big1 = BigInt(2)^^65535 + 4;
+    auto big2 = BigInt(2)^^65535;
+    auto arr = iota(big1, big2, -1).array;
+    assert(arr[0] == big1);
+    assert(arr[1] == big1-1);
+    assert(arr[2] == big1-2);
+    assert(arr[3] == big1-3);
 }
 
 ///
@@ -5858,44 +5842,6 @@ unittest
         }
         assert(x == 2);
     }
-}
-
-/* Generic overload that handles arbitrary types that support arithmetic
- * operations.
- *
- * User-defined types such as $(REF BigInt, std,bigint) are also supported, as long
- * as they can be incremented with $(D ++) and compared with $(D <) or $(D ==).
- */
-/// ditto
-auto iota(B, E)(B begin, E end)
-if (!isIntegral!(CommonType!(B, E)) &&
-    !isFloatingPoint!(CommonType!(B, E)) &&
-    !isPointer!(CommonType!(B, E)) &&
-    is(typeof((ref B b) { ++b; })) &&
-    (is(typeof(B.init < E.init)) || is(typeof(B.init == E.init))) )
-{
-    static struct Result
-    {
-        B current;
-        E end;
-
-        @property bool empty()
-        {
-            static if (is(typeof(B.init < E.init)))
-                return !(current < end);
-            else static if (is(typeof(B.init != E.init)))
-                return current == end;
-            else
-                static assert(0);
-        }
-        @property auto front() { return current; }
-        void popFront()
-        {
-            assert(!empty);
-            ++current;
-        }
-    }
-    return Result(begin, end);
 }
 
 @safe unittest
@@ -6282,7 +6228,8 @@ FrontTransversal!(RangeOfRanges, opt) frontTransversal(
 
 /**
     Given a range of ranges, iterate transversally through the
-    `n`th element of each of the enclosed ranges.
+    `n`th element of each of the enclosed ranges. This function
+    is similar to `unzip` in other languages.
 
     Params:
         opt = Controls the assumptions the function makes about the lengths
@@ -6518,7 +6465,17 @@ Transversal!(RangeOfRanges, opt) transversal
     x[0] = [1, 2];
     x[1] = [3, 4];
     auto ror = transversal(x, 1);
-    assert(equal(ror, [ 2, 4 ][]));
+    assert(equal(ror, [ 2, 4 ]));
+}
+
+/// The following code does a full unzip
+@safe unittest
+{
+    import std.algorithm.comparison : equal;
+    import std.algorithm.iteration : map;
+    int[][] y = [[1, 2, 3], [4, 5, 6]];
+    auto z = y.front.walkLength.iota.map!(i => transversal(y, i));
+    assert(equal!equal(z, [[1, 4], [2, 5], [3, 6]]));
 }
 
 @safe unittest
@@ -9865,6 +9822,15 @@ sgi.com/tech/stl/binary_search.html, binary_search).
         return !predFun(value, _input[i]);
     }
 
+/**
+Like $(D contains), but the value is specified before the range.
+*/
+    auto opBinaryRight(string op, V)(V value)
+    if (op == "in" && isRandomAccessRange!Range)
+    {
+        return contains(value);
+    }
+
 // groupBy
 /**
 Returns a range of subranges of elements that are equivalent according to the
@@ -9884,9 +9850,9 @@ sorting relation.
     auto a = [ 1, 2, 3, 42, 52, 64 ];
     auto r = assumeSorted(a);
     assert(r.contains(3));
-    assert(!r.contains(32));
+    assert(!(32 in r));
     auto r1 = sort!"a > b"(a);
-    assert(r1.contains(3));
+    assert(3 in r1);
     assert(!r1.contains(32));
     assert(r1.release() == [ 64, 52, 42, 3, 2, 1 ]);
 }
