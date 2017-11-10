@@ -5187,3 +5187,122 @@ if (isRandomAccessRange!Range && hasLength!Range)
          [1, 2, 0],
          [2, 1, 0]]));
 }
+
+struct CombinationsResult(size_t k, Flag!"Duplicates" dups = No.Duplicates, R)
+    if (isForwardRange!R)
+{
+    import std.meta : Repeat;
+    import std.typecons : Tuple;
+    
+    Repeat!(k, R) ranges;
+    bool _empty;
+    
+    this(R r)
+    {
+        foreach (ref e; ranges)
+        {
+            if (r.empty)
+            {
+                _empty = true;
+                break;
+            }
+            e = r.save;
+            static if (!dups) r.popFront();
+        }
+    }
+    
+    @property
+    Tuple!(Repeat!(k, ElementType!R)) front()
+    {
+        typeof(return) result;
+        static foreach (i; 0 .. k)
+            result[i] = ranges[i].front;
+        return result;
+    }
+    
+    @property
+    bool empty()
+    {
+        return _empty;
+    }
+    
+    void popFront()
+    {
+        popFrontImpl!(k-1)();
+    }
+    
+    private void popFrontImpl(size_t i)()
+    {
+        ranges[i].popFront();
+        if (!ranges[i].empty) return;
+        _empty |= i == 0;
+        static if (i != 0)
+        {
+            popFrontImpl!(i-1);
+            
+            ranges[i] = ranges[i-1];
+            static if (!dups) ranges[i].popFront;
+            _empty |= ranges[i].empty;
+        }
+    }
+}
+
+auto combinations(size_t k, Flag!"Duplicates" dups = No.Duplicates, R)(R r)
+    if (isForwardRange!R)
+{
+    return CombinationsResult!(k, dups, R)(r);
+}
+
+@safe unittest
+{
+    import std.algorithm.comparison : equal;
+    import std.range : iota;
+    
+    assert(equal(3.iota.combinations!(2, Yes.Duplicates),[
+        tuple(0, 0),
+        tuple(0, 1),
+        tuple(0, 2),
+        tuple(1, 1),
+        tuple(1, 2),
+        tuple(2, 2)
+        ]));
+    assert(equal(3.iota.combinations!(2, No.Duplicates),[
+        tuple(0, 1),
+        tuple(0, 2),
+        tuple(1, 2)
+        ]));
+    assert(equal(3.iota.combinations!(3, No.Duplicates),[
+        tuple(0, 1, 2)
+        ]));
+    assert(!equal(3.iota.combinations!(3, Yes.Duplicates),[
+        tuple(0, 0, 0),
+        tuple(0, 0, 1),
+        tuple(0, 0, 2),
+        tuple(0, 1, 0),
+        tuple(0, 1, 1),
+        tuple(0, 1, 2),
+        tuple(0, 2, 0),
+        tuple(0, 2, 1),
+        tuple(0, 2, 2),
+        tuple(1, 0, 0),
+        tuple(1, 0, 1),
+        tuple(1, 0, 2),
+        tuple(1, 1, 0),
+        tuple(1, 1, 1),
+        tuple(1, 1, 2),
+        tuple(1, 2, 0),
+        tuple(1, 2, 1),
+        tuple(1, 2, 2),
+        tuple(2, 0, 0),
+        tuple(2, 0, 1),
+        tuple(2, 0, 2),
+        tuple(2, 1, 0),
+        tuple(2, 1, 1),
+        tuple(2, 1, 2),
+        tuple(2, 2, 0),
+        tuple(2, 2, 1),
+        tuple(2, 2, 2)
+        ]));
+    assert(3.iota.combinations!(4, No.Duplicates).empty);
+    assert(3.iota.combinations!(4, Yes.Duplicates).walkLength == 15);
+}
