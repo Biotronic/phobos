@@ -50,7 +50,6 @@
 
 module std.internal.math.biguintx86;
 
-@system:
 pure:
 nothrow:
 
@@ -111,7 +110,8 @@ enum : int { KARATSUBASQUARELIMIT=26 }; // Minimum value for which square Karats
  * Set op == '+' for addition, '-' for subtraction.
  */
 uint multibyteAddSub(char op)(uint[] dest, const uint [] src1, const uint []
-        src2, uint carry) pure
+        src2, uint carry) pure @trusted
+if (op == '+' || op == '-')
 {
     // Timing:
     // Pentium M: 2.25/int
@@ -224,7 +224,7 @@ done:
  *  op must be '+' or '-'
  *  Returns final carry or borrow (0 or 1)
  */
-uint multibyteIncrementAssign(char op)(uint[] dest, uint carry) pure
+uint multibyteIncrementAssign(char op)(uint[] dest, uint carry) pure @trusted
 {
     enum { LASTPARAM = 1*4 } // 0* pushes + return address.
     asm pure nothrow {
@@ -254,7 +254,7 @@ L2:     dec EAX;
  *  numbits must be in the range 1 .. 31
  *  Returns the overflow
  */
-uint multibyteShlNoMMX(uint [] dest, const uint [] src, uint numbits) pure
+uint multibyteShlNoMMX(uint [] dest, const uint [] src, uint numbits) pure @trusted
 {
     // Timing: Optimal for P6 family.
     // 2.0 cycles/int on PPro .. PM (limited by execution port p0)
@@ -305,7 +305,7 @@ L_last:
  *  numbits must be in the range 1 .. 31
  * This version uses MMX.
  */
-uint multibyteShl(uint [] dest, const uint [] src, uint numbits) pure
+uint multibyteShl(uint [] dest, const uint [] src, uint numbits) pure @trusted
 {
     // Timing:
     // K7 1.2/int. PM 1.7/int P4 5.3/int
@@ -388,7 +388,7 @@ L_length1:
     }
 }
 
-void multibyteShr(uint [] dest, const uint [] src, uint numbits) pure
+void multibyteShr(uint [] dest, const uint [] src, uint numbits) pure @trusted
 {
     enum { LASTPARAM = 4*4 } // 3* pushes + return address.
     asm pure nothrow {
@@ -564,7 +564,7 @@ L_last:
  * Returns carry.
  */
 uint multibyteMul(uint[] dest, const uint[] src, uint multiplier, uint carry)
-    pure
+    pure @trusted
 {
     // Timing: definitely not optimal.
     // Pentium M: 5.0 cycles/operation, has 3 resource stalls/iteration
@@ -730,7 +730,9 @@ string asmMulAdd_enter_odd(string OP, string M_ADDRESS) pure
  * Returns carry out of MSB (0 .. FFFF_FFFF).
  */
 uint multibyteMulAdd(char op)(uint [] dest, const uint [] src, uint
-        multiplier, uint carry) pure {
+        multiplier, uint carry) pure @trusted
+if (op == '+' || op == '-')
+{
     // Timing: This is the most time-critical bignum function.
     // Pentium M: 5.4 cycles/operation, still has 2 resource stalls + 1load block/iteration
 
@@ -820,7 +822,7 @@ L_enter_odd:
     ----
  */
 void multibyteMultiplyAccumulate(uint [] dest, const uint[] left,
-        const uint [] right) pure {
+        const uint [] right) pure @trusted {
     // Register usage
     // EDX:EAX = used in multiply
     // EBX = index
@@ -908,7 +910,7 @@ L_enter_odd:
  * Based on public domain code by Eric Bainville.
  * (http://www.bealto.com/) Used with permission.
  */
-uint multibyteDivAssign(uint [] dest, uint divisor, uint overflow) pure
+uint multibyteDivAssign(uint [] dest, uint divisor, uint overflow) pure @trusted
 {
     // Timing: limited by a horrible dependency chain.
     // Pentium M: 18 cycles/op, 8 resource stalls/op.
@@ -1026,7 +1028,7 @@ Lc:
 }
 
 // Set dest[2*i .. 2*i+1]+=src[i]*src[i]
-void multibyteAddDiagonalSquares(uint [] dest, const uint [] src) pure
+void multibyteAddDiagonalSquares(uint [] dest, const uint [] src) pure @trusted
 {
     /* Unlike mulAdd, the carry is only 1 bit,
            since FFFF*FFFF+FFFF_FFFF = 1_0000_0000.
@@ -1103,7 +1105,7 @@ length2:
 //dest += src[0]*src[1...$] + src[1]*src[2..$] + ... + src[$-3]*src[$-2..$]+ src[$-2]*src[$-1]
 // assert(dest.length = src.length*2);
 // assert(src.length >= 3);
-void multibyteTriangleAccumulateAsm(uint[] dest, const uint[] src) pure
+void multibyteTriangleAccumulateAsm(uint[] dest, const uint[] src) pure @trusted
 {
     // Register usage
     // EDX:EAX = used in multiply
@@ -1256,7 +1258,7 @@ L_enter_odd:
 }
 
 
-void multibyteSquare(BigDigit[] result, const BigDigit [] x) pure
+void multibyteSquare(BigDigit[] result, const BigDigit [] x) pure @safe
 {
     if (x.length < 4)
     {

@@ -51,6 +51,7 @@ public import std.ascii : LetterCase;
 import std.range.primitives;
 import std.traits;
 
+@safe:
 private:
 // Limits for when to switch between algorithms.
 // Half the size of the data cache.
@@ -96,6 +97,7 @@ public:
 /// BigUint performs memory management and wraps the low-level calls.
 struct BigUint
 {
+@safe:
 private:
     pure invariant()
     {
@@ -104,12 +106,12 @@ private:
 
     immutable(BigDigit) [] data = ZERO;
 
-    this(immutable(BigDigit) [] x) pure nothrow @nogc @safe
+    this(immutable(BigDigit) [] x) pure nothrow @nogc
     {
        data = x;
     }
   package(std)  // used from: std.bigint
-    this(T)(T x) pure nothrow @safe if (isIntegral!T)
+    this(T)(T x) pure nothrow if (isIntegral!T)
     {
         opAssign(x);
     }
@@ -119,7 +121,7 @@ private:
     };
 public:
     // Length in uints
-    @property size_t uintLength() pure nothrow const @safe @nogc
+    @property size_t uintLength() pure nothrow const @nogc
     {
         static if (BigDigit.sizeof == uint.sizeof)
         {
@@ -131,7 +133,7 @@ public:
             ((data[$-1] & 0xFFFF_FFFF_0000_0000L) ? 1 : 0);
         }
     }
-    @property size_t ulongLength() pure nothrow const @safe @nogc
+    @property size_t ulongLength() pure nothrow const @nogc
     {
         static if (BigDigit.sizeof == uint.sizeof)
         {
@@ -144,7 +146,7 @@ public:
     }
 
     // The value at (cast(ulong[]) data)[n]
-    ulong peekUlong(int n) pure nothrow const @safe @nogc
+    ulong peekUlong(int n) pure nothrow const @nogc
     {
         static if (BigDigit.sizeof == int.sizeof)
         {
@@ -156,7 +158,7 @@ public:
             return data[n];
         }
     }
-    uint peekUint(int n) pure nothrow const @safe @nogc
+    uint peekUint(int n) pure nothrow const @nogc
     {
         static if (BigDigit.sizeof == int.sizeof)
         {
@@ -170,7 +172,7 @@ public:
     }
 public:
     ///
-    void opAssign(Tulong)(Tulong u) pure nothrow @safe if (is (Tulong == ulong))
+    void opAssign(Tulong)(Tulong u) pure nothrow if (is (Tulong == ulong))
     {
         if (u == 0) data = ZERO;
         else if (u == 1) data = ONE;
@@ -197,13 +199,13 @@ public:
             }
         }
     }
-    void opAssign(Tdummy = void)(BigUint y) pure nothrow @nogc @safe
+    void opAssign(Tdummy = void)(BigUint y) pure nothrow @nogc
     {
         this.data = y.data;
     }
 
     ///
-    int opCmp(Tdummy = void)(const BigUint y) pure nothrow @nogc const @safe
+    int opCmp(Tdummy = void)(const BigUint y) pure nothrow @nogc const
     {
         if (data.length != y.data.length)
             return (data.length > y.data.length) ?  1 : -1;
@@ -214,7 +216,7 @@ public:
     }
 
     ///
-    int opCmp(Tulong)(Tulong y) pure nothrow @nogc const @safe if (is (Tulong == ulong))
+    int opCmp(Tulong)(Tulong y) pure nothrow @nogc const if (is (Tulong == ulong))
     {
         if (data.length > maxBigDigits!Tulong)
             return 1;
@@ -240,12 +242,12 @@ public:
         return 0;
     }
 
-    bool opEquals(Tdummy = void)(ref const BigUint y) pure nothrow @nogc const @safe
+    bool opEquals(Tdummy = void)(ref const BigUint y) pure nothrow @nogc const
     {
            return y.data[] == data[];
     }
 
-    bool opEquals(Tdummy = void)(ulong y) pure nothrow @nogc const @safe
+    bool opEquals(Tdummy = void)(ulong y) pure nothrow @nogc const
     {
         if (data.length > 2)
             return false;
@@ -258,12 +260,12 @@ public:
         return (data[0] == ylo);
     }
 
-    bool isZero() pure const nothrow @safe @nogc
+    bool isZero() pure const nothrow @nogc
     {
         return data.length == 1 && data[0] == 0;
     }
 
-    size_t numBytes() pure nothrow const @safe @nogc
+    size_t numBytes() pure nothrow const @nogc
     {
         return data.length * BigDigit.sizeof;
     }
@@ -286,7 +288,7 @@ public:
      */
     char [] toHexString(int frontExtraBytes, char separator = 0,
             int minPadding=0, char padChar = '0',
-            LetterCase letterCase = LetterCase.upper) const pure nothrow @safe
+            LetterCase letterCase = LetterCase.upper) const pure nothrow
     {
         // Calculate number of extra padding bytes
         size_t extraPad = (minPadding > data.length * 2 * BigDigit.sizeof)
@@ -563,7 +565,7 @@ public:
         if (wantSub)
         {   // perform a subtraction
             bool negative;
-            r.data = sub(x.data, y.data, &negative);
+            () @trusted { r.data = sub(x.data, y.data, &negative); } ();
             *sign ^= negative;
             if (r.isZero())
             {
@@ -708,7 +710,7 @@ public:
 
     // return x op y
     static BigUint bitwiseOp(string op)(BigUint x, BigUint y, bool xSign, bool ySign, ref bool resultSign)
-    pure nothrow @safe if (op == "|" || op == "^" || op == "&")
+    pure nothrow if (op == "|" || op == "^" || op == "&")
     {
         auto d1 = includeSign(x.data, y.uintLength, xSign);
         auto d2 = includeSign(y.data, x.uintLength, ySign);
@@ -964,14 +966,14 @@ public:
 }
 
 // Remove leading zeros from x, to restore the BigUint invariant
-inout(BigDigit) [] removeLeadingZeros(inout(BigDigit) [] x) pure nothrow @safe
+inout(BigDigit) [] removeLeadingZeros(inout(BigDigit) [] x) pure nothrow
 {
     size_t k = x.length;
     while (k>1 && x[k - 1]==0) --k;
     return x[0 .. k];
 }
 
-pure @system unittest
+pure @safe/*system*/ unittest
 {
    BigUint r = BigUint([5]);
    BigUint t = BigUint([7]);
@@ -993,7 +995,7 @@ pure @system unittest
 
 
 // Pow tests
-pure @system unittest
+pure @safe/*system*/ unittest
 {
     BigUint r, s;
     r.fromHexString("80000000_00000001");
@@ -1062,7 +1064,7 @@ pure @system unittest
 
 private:
 void twosComplement(const(BigDigit) [] x, BigDigit[] result)
-pure nothrow @safe
+pure nothrow
 {
     foreach (i; 0 .. x.length)
     {
@@ -1086,7 +1088,7 @@ pure nothrow @safe
 
 // Encode BigInt as BigDigit array (sign and 2's complement)
 BigDigit[] includeSign(const(BigDigit) [] x, size_t minSize, bool sign)
-pure nothrow @safe
+pure nothrow
 {
     size_t length = (x.length > minSize) ? x.length : minSize;
     BigDigit [] result = new BigDigit[length];
@@ -1102,7 +1104,7 @@ pure nothrow @safe
 }
 
 // works for any type
-T intpow(T)(T x, ulong n) pure nothrow @safe
+T intpow(T)(T x, ulong n) pure nothrow
 {
     T p;
 
@@ -1138,7 +1140,7 @@ T intpow(T)(T x, ulong n) pure nothrow @safe
 
 
 //  returns the maximum power of x that will fit in a uint.
-int highestPowerBelowUintMax(uint x) pure nothrow @safe
+int highestPowerBelowUintMax(uint x) pure nothrow
 {
      assert(x>1);
      static immutable ubyte [22] maxpwr = [ 31, 20, 15, 13, 12, 11, 10, 10, 9, 9,
@@ -1153,7 +1155,7 @@ int highestPowerBelowUintMax(uint x) pure nothrow @safe
 }
 
 //  returns the maximum power of x that will fit in a ulong.
-int highestPowerBelowUlongMax(uint x) pure nothrow @safe
+int highestPowerBelowUlongMax(uint x) pure nothrow
 {
      assert(x>1);
      static immutable ubyte [39] maxpwr = [ 63, 40, 31, 27, 24, 22, 21, 20, 19, 18,
@@ -1176,7 +1178,7 @@ int highestPowerBelowUlongMax(uint x) pure nothrow @safe
 version(unittest)
 {
 
-int slowHighestPowerBelowUintMax(uint x) pure nothrow @safe
+int slowHighestPowerBelowUintMax(uint x) pure nothrow
 {
      int pwr = 1;
      for (ulong q = x;x*q < cast(ulong) uint.max; )
@@ -1560,7 +1562,7 @@ void divModInternal(BigDigit [] quotient, BigDigit[] remainder, const BigDigit [
     () @trusted { GC.free(un.ptr); GC.free(vn.ptr); } ();
 }
 
-pure @system unittest
+pure @safe/*system*/ unittest
 {
     immutable(uint) [] u = [0, 0xFFFF_FFFE, 0x8000_0000];
     immutable(uint) [] v = [0xFFFF_FFFF, 0x8000_0000];
@@ -1583,7 +1585,7 @@ private:
 // buff.length must be data.length*8 if separator is zero,
 // or data.length*9 if separator is non-zero. It will be completely filled.
 char [] biguintToHex(char [] buff, const BigDigit [] data, char separator=0,
-        LetterCase letterCase = LetterCase.upper) pure nothrow @safe
+        LetterCase letterCase = LetterCase.upper) pure nothrow
 {
     int x=0;
     for (ptrdiff_t i=data.length - 1; i >= 0; --i)
@@ -1613,7 +1615,7 @@ char [] biguintToHex(char [] buff, const BigDigit [] data, char separator=0,
  * `buff.length - 1` if the entire big uint is zero.
  */
 size_t biguintToOctal(char[] buff, const(BigDigit)[] data)
-    pure nothrow @safe @nogc
+    pure nothrow @nogc
 {
     ubyte carry = 0;
     int shift = 0;
@@ -2020,7 +2022,7 @@ bool inplaceSub(BigDigit[] result, const(BigDigit)[] x, const(BigDigit)[] y)
 /* Determine how much space is required for the temporaries
  * when performing a Karatsuba multiplication.
  */
-size_t karatsubaRequiredBuffSize(size_t xlen) pure nothrow @safe
+size_t karatsubaRequiredBuffSize(size_t xlen) pure nothrow
 {
     return xlen <= KARATSUBALIMIT ? 0 : 2*xlen; // - KARATSUBALIMIT+2;
 }
@@ -2199,7 +2201,7 @@ void squareKaratsuba(BigDigit [] result, const BigDigit [] x,
  * u[0 .. v.length] holds the remainder.
  */
 void schoolbookDivMod(BigDigit [] quotient, BigDigit [] u, in BigDigit [] v)
-    pure nothrow
+    pure nothrow @trusted
 {
     assert(quotient.length == u.length - v.length);
     assert(v.length > 1);
@@ -2282,7 +2284,7 @@ private:
 
 // TODO: Replace with a library call
 void itoaZeroPadded(char[] output, uint value)
-    pure nothrow @safe @nogc
+    pure nothrow @nogc
 {
     for (auto i = output.length; i--;)
     {
@@ -2300,7 +2302,7 @@ void itoaZeroPadded(char[] output, uint value)
 }
 
 void toHexZeroPadded(char[] output, uint value,
-        LetterCase letterCase = LetterCase.upper) pure nothrow @safe
+        LetterCase letterCase = LetterCase.upper) pure nothrow
 {
     ptrdiff_t x = output.length - 1;
     static immutable string upperHexDigits = "0123456789ABCDEF";
@@ -2324,7 +2326,7 @@ private:
 // Returns the highest value of i for which left[i]!=right[i],
 // or 0 if left[] == right[]
 size_t highestDifferentDigit(const BigDigit [] left, const BigDigit [] right)
-pure nothrow @nogc @safe
+pure nothrow @nogc
 {
     assert(left.length == right.length);
     for (ptrdiff_t i = left.length - 1; i>0; --i)
@@ -2336,7 +2338,7 @@ pure nothrow @nogc @safe
 }
 
 // Returns the lowest value of i for which x[i]!=0.
-int firstNonZeroDigit(const BigDigit [] x) pure nothrow @nogc @safe
+int firstNonZeroDigit(const BigDigit [] x) pure nothrow @nogc
 {
     int k = 0;
     while (x[k]==0)
@@ -2515,7 +2517,7 @@ pure nothrow
     () @trusted { GC.free(scratch.ptr); } ();
 }
 
-@system unittest
+@safe/*system*/ unittest
 {
     import core.stdc.stdio;
 
