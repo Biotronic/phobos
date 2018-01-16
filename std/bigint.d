@@ -304,7 +304,6 @@ public:
     ///
     @safe unittest
     {
-        //@safe because opOpAssign is @safe
         auto b = BigInt("1_000_000_000");
 
         b += 12345;
@@ -415,7 +414,6 @@ public:
     ///
     @safe unittest
     {
-        // @safe because opOpAssign is @safe
         auto x = BigInt("123");
         auto y = BigInt("321");
         x += y;
@@ -729,7 +727,6 @@ public:
         import std.conv : to, ConvOverflowException;
         import std.exception : assertThrown;
 
-        assert(cast(int)BigInt("0") == 0);
         assert(BigInt("0").to!int == 0);
 
         assert(BigInt("0").to!ubyte == 0);
